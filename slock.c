@@ -16,8 +16,10 @@
 #include <sys/types.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/keysym.h>
+#include <X11/XF86keysym.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
+#include <X11/XKBlib.h>
 
 #include "arg.h"
 #include "util.h"
@@ -26,8 +28,10 @@ char *argv0;
 
 enum {
 	INIT,
+	CLEAR,
 	INPUT,
 	FAILED,
+	CAPS,
 	NUMCOLS
 };
 
@@ -130,33 +134,48 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 {
 	XRRScreenChangeNotifyEvent *rre;
 	char buf[32], passwd[256], *inputhash;
-	int num, screen, running, failure, oldc;
-	unsigned int len, color;
+	int num, screen, running, failure, oldc, caps, flash;
+	unsigned int len, color, indicators;
 	KeySym ksym;
 	XEvent ev;
 
+	flash = caps = 0;
 	len = 0;
 	running = 1;
 	failure = 0;
 	oldc = INIT;
 
+	if (!XkbGetIndicatorState(dpy, XkbUseCoreKbd, &indicators))
+		caps = indicators & 1;
+
 	while (running && !XNextEvent(dpy, &ev)) {
 		if (ev.type == KeyPress) {
 			explicit_bzero(&buf, sizeof(buf));
 			num = XLookupString(&ev.xkey, buf, sizeof(buf), &ksym, 0);
-			if (IsKeypadKey(ksym)) {
+			if(IsKeypadKey(ksym)) {
 				if (ksym == XK_KP_Enter)
 					ksym = XK_Return;
 				else if (ksym >= XK_KP_0 && ksym <= XK_KP_9)
 					ksym = (ksym - XK_KP_0) + XK_0;
 			}
-			if (IsFunctionKey(ksym) ||
-			    IsKeypadKey(ksym) ||
-			    IsMiscFunctionKey(ksym) ||
-			    IsPFKey(ksym) ||
-			    IsPrivateKeypadKey(ksym))
-				continue;
+			if(ev.xkey.state & ControlMask) {
+				switch(ksym) {
+				case XK_u:
+				case XK_c:
+					ksym = XK_Escape;
+					break;
+				}
+			}
 			switch (ksym) {
+			case XF86XK_AudioPlay:
+			case XF86XK_AudioPrev:
+			case XF86XK_AudioNext:
+			case XF86XK_AudioStop:
+			case XF86XK_AudioLowerVolume:
+			case XF86XK_AudioRaiseVolume:
+			case XF86XK_AudioMute:
+				XSendEvent(dpy, locks[0]->root, True, KeyPressMask, &ev);
+				break;
 			case XK_Return:
 				passwd[len] = '\0';
 				errno = 0;
@@ -174,12 +193,23 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			case XK_Escape:
 				explicit_bzero(&passwd, sizeof(passwd));
 				len = 0;
+				failure = 0;
+				flash = !flash;
 				break;
 			case XK_BackSpace:
 				if (len)
 					passwd[--len] = '\0';
 				break;
+			case XK_Caps_Lock:
+				caps = !caps;
+				break;
 			default:
+				if (IsFunctionKey(ksym) ||
+			    		IsKeypadKey(ksym) ||
+			   	 	IsMiscFunctionKey(ksym) ||
+			    		IsPFKey(ksym) ||
+			    		IsPrivateKeypadKey(ksym))
+					continue;
 				if (num && !iscntrl((int)buf[0]) &&
 				    (len + num < sizeof(passwd))) {
 					memcpy(passwd + len, buf, num);
@@ -187,7 +217,9 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				}
 				break;
 			}
-			color = len ? INPUT : ((failure || failonclear) ? FAILED : INIT);
+			color = len ? (caps ? CAPS : INPUT) : 
+				((failure || failonclear) ? FAILED :
+				 (caps ? CAPS : INIT));
 			if (running && oldc != color) {
 				for (screen = 0; screen < nscreens; screen++) {
 					XSetWindowBackground(dpy,

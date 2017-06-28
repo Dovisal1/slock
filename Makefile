@@ -8,7 +8,10 @@ OBJ = ${SRC:.c=.o}
 
 all: options slock
 
-options:
+suid: all
+	sudo sh -c "chown root:root slock; chmod 4775 slock"
+
+ptions:
 	@echo slock build options:
 	@echo "CFLAGS   = ${CFLAGS}"
 	@echo "LDFLAGS  = ${LDFLAGS}"
