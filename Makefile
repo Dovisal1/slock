@@ -9,7 +9,8 @@ OBJ = ${SRC:.c=.o}
 all: options slock
 
 suid: all
-	sudo sh -c "chown root:root slock; chmod 4775 slock"
+	chown root:root slock
+	chmod 4775 slock
 
 ptions:
 	@echo slock build options:
