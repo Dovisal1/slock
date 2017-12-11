@@ -6,13 +6,13 @@ include config.mk
 SRC = slock.c ${COMPATSRC}
 OBJ = ${SRC:.c=.o}
 
-all: options slock
+all: slock
 
-suid: all
+suid: slock
 	chown root:root slock
 	chmod 4775 slock
 
-ptions:
+options:
 	@echo slock build options:
 	@echo "CFLAGS   = ${CFLAGS}"
 	@echo "LDFLAGS  = ${LDFLAGS}"

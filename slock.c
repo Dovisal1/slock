@@ -26,6 +26,19 @@
 
 char *argv0;
 
+// power argument sets
+char *av_sleep[] = {"sh", "-c", "sleep 3 && systemctl suspend -i", NULL};
+char *av_power[] = {"systemctl", "poweroff", "-i", NULL};
+const int NPOWEROFF = 3;
+
+// volume argument sets
+char *av_raise_volume[] = {"amixer", "-q", "-D", "pulse", "sset", "Master", "5%+", NULL};
+char *av_lower_volume[]  = {"amixer", "-q", "-D", "pulse", "sset", "Master", "5%-", NULL};
+char *av_mute[]  = {"amixer", "-q", "-D", "pulse", "sset", "Master", "toggle", NULL};
+char *av_pause[] = {"playerctl", "play-pause", NULL};
+char *av_next[] = {"playerctl", "next", NULL};
+char *av_prev[] = {"playerctl", "previous", NULL};
+
 enum {
 	INIT,
 	CLEAR,
@@ -129,17 +142,27 @@ gethash(void)
 }
 
 static void
+launchcmd(char **args)
+{
+	if (!fork())
+		execvp(args[0], args);
+}
+
+static void
 readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
        const char *hash)
 {
 	XRRScreenChangeNotifyEvent *rre;
 	char buf[32], passwd[256], *inputhash;
-	int num, screen, running, failure, oldc, caps, flash;
+	int num, screen, running, failure, oldc, caps, flash, sleep, poweroff;
 	unsigned int len, color, indicators;
 	KeySym ksym;
 	XEvent ev;
 
-	flash = caps = 0;
+	flash = 0;
+	caps = 0;
+	sleep = 0;
+	poweroff = 0;
 	len = 0;
 	running = 1;
 	failure = 0;
@@ -160,6 +183,12 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			}
 			if(ev.xkey.state & ControlMask) {
 				switch(ksym) {
+				case XK_p:
+					if (++poweroff == NPOWEROFF)
+						execvp(av_power[0], av_power);
+					continue;
+				case XK_z:
+					sleep = 1;
 				case XK_u:
 				case XK_c:
 					ksym = XK_Escape;
@@ -168,14 +197,26 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			}
 			switch (ksym) {
 			case XF86XK_AudioPlay:
-			case XF86XK_AudioPrev:
-			case XF86XK_AudioNext:
 			case XF86XK_AudioStop:
-			case XF86XK_AudioLowerVolume:
-			case XF86XK_AudioRaiseVolume:
-			case XF86XK_AudioMute:
-				XSendEvent(dpy, locks[0]->root, True, KeyPressMask, &ev);
+				launchcmd(av_pause);
 				break;
+			case XF86XK_AudioPrev:
+				launchcmd(av_prev);
+				break;
+			case XF86XK_AudioNext:
+				launchcmd(av_next);
+				break;
+			case XF86XK_AudioLowerVolume:
+				launchcmd(av_lower_volume);
+				break;
+			case XF86XK_AudioRaiseVolume:
+				launchcmd(av_raise_volume);
+				break;
+			case XF86XK_AudioMute:
+				launchcmd(av_mute);
+				break;
+				//XSendEvent(dpy, locks[0]->root, True, KeyPressMask, &ev);
+				//XSendEvent(dpy, DefaultRootWindow(dpy), True, KeyPressMask, &ev);
 			case XK_Return:
 				passwd[len] = '\0';
 				errno = 0;
@@ -194,7 +235,11 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				explicit_bzero(&passwd, sizeof(passwd));
 				len = 0;
 				failure = 0;
+				poweroff = 0;
 				flash = !flash;
+				if (sleep && !fork())
+					execvp(av_sleep[0], av_sleep);
+				sleep = 0;
 				break;
 			case XK_BackSpace:
 				if (len)
@@ -217,7 +262,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				}
 				break;
 			}
-			color = len ? (caps ? CAPS : INPUT) : 
+			color = len ? (caps ? CAPS : INPUT) :
 				((failure || failonclear) ? FAILED :
 				 (caps ? CAPS : INIT));
 			if (running && oldc != color) {
