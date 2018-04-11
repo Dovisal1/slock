@@ -20,11 +20,14 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/XKBlib.h>
+#include <Imlib2.h>
 
 #include "arg.h"
 #include "util.h"
 
 char *argv0;
+
+Imlib_Image image;
 
 // power argument sets
 char *av_sleep[] = {"sh", "-c", "sleep 3 && systemctl suspend -i", NULL};
@@ -52,6 +55,7 @@ struct lock {
 	int screen;
 	Window root, win;
 	Pixmap pmap;
+	Pixmap bgmap;
 	unsigned long colors[NUMCOLS];
 };
 
@@ -216,8 +220,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			case XF86XK_AudioMute:
 				launchcmd(av_mute);
 				break;
-				//XSendEvent(dpy, locks[0]->root, True, KeyPressMask, &ev);
-				//XSendEvent(dpy, DefaultRootWindow(dpy), True, KeyPressMask, &ev);
 			case XK_Return:
 				passwd[len] = '\0';
 				errno = 0;
@@ -268,7 +270,12 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				 (caps ? CAPS : INIT));
 			if (running && oldc != color) {
 				for (screen = 0; screen < nscreens; screen++) {
-					XSetWindowBackground(dpy,
+					if (locks[screen]->bgmap && color==INIT)
+						XSetWindowBackgroundPixmap(dpy,
+							locks[screen]->win,
+							locks[screen]->bgmap);
+					else
+						XSetWindowBackground(dpy,
 					                     locks[screen]->win,
 					                     locks[screen]->colors[color]);
 					XClearWindow(dpy, locks[screen]->win);
@@ -313,10 +320,28 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	lock->screen = screen;
 	lock->root = RootWindow(dpy, lock->screen);
 
+
 	for (i = 0; i < NUMCOLS; i++) {
 		XAllocNamedColor(dpy, DefaultColormap(dpy, lock->screen),
 		                 colorname[i], &color, &dummy);
 		lock->colors[i] = color.pixel;
+	}
+
+	if (image) {
+		lock->bgmap = XCreatePixmap(dpy, lock->root,
+				DisplayWidth(dpy, lock->screen),
+				DisplayHeight(dpy, lock->screen),
+				DefaultDepth(dpy, lock->screen));
+		imlib_context_set_image(image);
+		imlib_context_set_display(dpy);
+		imlib_context_set_visual(DefaultVisual(dpy, lock->screen));
+		imlib_context_set_colormap(DefaultColormap(dpy, lock->screen));
+		imlib_context_set_drawable(lock->bgmap);
+		//imlib_render_image_on_drawable(0, 0);
+		imlib_render_image_on_drawable_at_size(0, 0,
+				DisplayWidth(dpy, lock->screen),
+				DisplayHeight(dpy, lock->screen));
+		imlib_free_image();
 	}
 
 	/* init */
@@ -329,6 +354,10 @@ lockscreen(Display *dpy, struct xrandr *rr, int screen)
 	                          CopyFromParent,
 	                          DefaultVisual(dpy, lock->screen),
 	                          CWOverrideRedirect | CWBackPixel, &wa);
+
+	if (lock->bgmap)
+		XSetWindowBackgroundPixmap(dpy, lock->win, lock->bgmap);
+
 	lock->pmap = XCreateBitmapFromData(dpy, lock->win, curs, 8, 8);
 	invisible = XCreatePixmapCursor(dpy, lock->pmap, lock->pmap,
 	                                &color, &color, 0, 0);
@@ -401,6 +430,8 @@ main(int argc, char **argv) {
 		usage();
 	} ARGEND
 
+	image = imlib_load_image("/home/dms/.config/i3/wall");
+
 	/* validate drop-user and -group */
 	errno = 0;
 	if (!(pwd = getpwnam(user)))
@@ -424,6 +455,8 @@ main(int argc, char **argv) {
 
 	if (!(dpy = XOpenDisplay(NULL)))
 		die("slock: cannot open display\n");
+
+	printf("%d %d\n", 0, 0);
 
 	/* drop privileges */
 	if (setgroups(0, NULL) < 0)
