@@ -198,6 +198,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			switch (ksym) {
 			case XF86XK_AudioPlay:
 			case XF86XK_AudioStop:
+			case XK_F1:
 				launchcmd(av_pause);
 				break;
 			case XF86XK_AudioPrev:
