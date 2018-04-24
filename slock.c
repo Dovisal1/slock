@@ -172,6 +172,9 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	failure = 0;
 	oldc = INIT;
 
+	XGCValues values = {.cap_style=CapButt, .join_style=JoinBevel};
+	GC gc = XCreateGC(dpy,
+
 	if (!XkbGetIndicatorState(dpy, XkbUseCoreKbd, &indicators))
 		caps = indicators & 1;
 
