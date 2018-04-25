@@ -30,17 +30,17 @@ char *argv0;
 Imlib_Image image;
 
 // power argument sets
-char *av_sleep[] = {"sh", "-c", "sleep 3 && systemctl suspend -i", NULL};
-char *av_power[] = {"systemctl", "poweroff", "-i", NULL};
+char *cmd_sleep = "sleep 3 && systemctl suspend -i";
+char *cmd_power = "systemctl poweroff -i";
 const int NPOWEROFF = 3;
 
 // volume argument sets
-char *av_raise_volume[] = {"amixer", "-q", "-D", "pulse", "sset", "Master", "5%+", NULL};
-char *av_lower_volume[]  = {"amixer", "-q", "-D", "pulse", "sset", "Master", "5%-", NULL};
-char *av_mute[]  = {"amixer", "-q", "-D", "pulse", "sset", "Master", "toggle", NULL};
-char *av_pause[] = {"playerctl", "play-pause", NULL};
-char *av_next[] = {"playerctl", "next", NULL};
-char *av_prev[] = {"playerctl", "previous", NULL};
+char *raise_volume = "amixer -q -D pulse sset Master 5%+";
+char *lower_volume = "amixer -q -D pulse sset Master 5%-";
+char *media_mute = "amixer -q -D pulse sset Master toggle";
+char *media_pause = "playerctl play-pause";
+char *media_next = "playerctl next";
+char *media_prev = "playerctl previous";
 
 enum {
 	INIT,
@@ -146,13 +146,6 @@ gethash(void)
 }
 
 static void
-launchcmd(char **args)
-{
-	if (!fork())
-		execvp(args[0], args);
-}
-
-static void
 readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
        const char *hash)
 {
@@ -189,7 +182,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				switch(ksym) {
 				case XK_p:
 					if (++poweroff == NPOWEROFF)
-						execvp(av_power[0], av_power);
+						system(cmd_power);
 					continue;
 				case XK_z:
 					sleep = 1;
@@ -203,22 +196,22 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			case XF86XK_AudioPlay:
 			case XF86XK_AudioStop:
 			case XK_F1:
-				launchcmd(av_pause);
+				system(media_pause);
 				break;
 			case XF86XK_AudioPrev:
-				launchcmd(av_prev);
+				system(media_prev);
 				break;
 			case XF86XK_AudioNext:
-				launchcmd(av_next);
+				system(media_next);
 				break;
 			case XF86XK_AudioLowerVolume:
-				launchcmd(av_lower_volume);
+				system(lower_volume);
 				break;
 			case XF86XK_AudioRaiseVolume:
-				launchcmd(av_raise_volume);
+				system(raise_volume);
 				break;
 			case XF86XK_AudioMute:
-				launchcmd(av_mute);
+				system(media_mute);
 				break;
 			case XK_Return:
 				passwd[len] = '\0';
@@ -240,8 +233,8 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				failure = 0;
 				poweroff = 0;
 				flash = !flash;
-				if (sleep && !fork())
-					execvp(av_sleep[0], av_sleep);
+				if (sleep)
+					system(cmd_sleep);
 				sleep = 0;
 				break;
 			case XK_BackSpace:
