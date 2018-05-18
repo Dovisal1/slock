@@ -8,12 +8,14 @@
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/keysym.h>
 #include <X11/XF86keysym.h>
@@ -41,6 +43,21 @@ char *media_mute = "amixer -q -D pulse sset Master toggle";
 char *media_pause = "playerctl play-pause";
 char *media_next = "playerctl next";
 char *media_prev = "playerctl previous";
+
+static void
+sigchld(int sig)
+{
+	while (waitpid(-1, NULL, WNOHANG) > 0)
+		;
+}
+
+static void
+asystem(const char *cmd)
+{
+	if (!fork()) {
+		exit(system(cmd));
+	}
+}
 
 enum {
 	INIT,
@@ -182,7 +199,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				switch(ksym) {
 				case XK_p:
 					if (++poweroff == NPOWEROFF)
-						system(cmd_power);
+						asystem(cmd_power);
 					continue;
 				case XK_z:
 					sleep = 1;
@@ -196,22 +213,22 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			case XF86XK_AudioPlay:
 			case XF86XK_AudioStop:
 			case XK_F1:
-				system(media_pause);
+				asystem(media_pause);
 				break;
 			case XF86XK_AudioPrev:
-				system(media_prev);
+				asystem(media_prev);
 				break;
 			case XF86XK_AudioNext:
-				system(media_next);
+				asystem(media_next);
 				break;
 			case XF86XK_AudioLowerVolume:
-				system(lower_volume);
+				asystem(lower_volume);
 				break;
 			case XF86XK_AudioRaiseVolume:
-				system(raise_volume);
+				asystem(raise_volume);
 				break;
 			case XF86XK_AudioMute:
-				system(media_mute);
+				asystem(media_mute);
 				break;
 			case XK_Return:
 				passwd[len] = '\0';
@@ -234,7 +251,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				poweroff = 0;
 				flash = !flash;
 				if (sleep)
-					system(cmd_sleep);
+					asystem(cmd_sleep);
 				sleep = 0;
 				break;
 			case XK_BackSpace:
@@ -424,6 +441,9 @@ main(int argc, char **argv) {
 	} ARGEND
 
 	image = imlib_load_image("/home/dms/.config/i3/wall");
+
+	if (signal(SIGCHLD, sigchld) == SIG_ERR)
+		die("slock: could not catch SIGCHLD\n");
 
 	/* validate drop-user and -group */
 	errno = 0;
