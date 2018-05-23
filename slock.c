@@ -31,12 +31,12 @@ char *argv0;
 
 Imlib_Image image;
 
-// power argument sets
+// power commands
 char *cmd_sleep = "sleep 3 && systemctl suspend -i";
 char *cmd_power = "systemctl poweroff -i";
 const int NPOWEROFF = 3;
 
-// volume argument sets
+// playback commands
 char *raise_volume = "amixer -q -D pulse sset Master 5%+";
 char *lower_volume = "amixer -q -D pulse sset Master 5%-";
 char *media_mute = "amixer -q -D pulse sset Master toggle";
