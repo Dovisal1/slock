@@ -8,7 +8,6 @@
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
-#include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -32,31 +31,31 @@ char *argv0;
 Imlib_Image image;
 
 // power commands
-char *cmd_sleep = "sleep 3 && systemctl suspend -i";
-char *cmd_power = "systemctl poweroff -i";
+char *cmd_sleep[] = {"sh", "-c", "sleep 3 && systemctl suspend -i"};
+char *cmd_power[] = {"systemctl", "poweroff", "-i"};
 const int NPOWEROFF = 3;
 
 // playback commands
-char *raise_volume = "amixer -q -D pulse sset Master 5%+";
-char *lower_volume = "amixer -q -D pulse sset Master 5%-";
-char *media_mute = "amixer -q -D pulse sset Master toggle";
-char *media_pause = "playerctl play-pause";
-char *media_next = "playerctl next";
-char *media_prev = "playerctl previous";
+char *raise_volume[] = {"amixer", "-q", "-D", "pulse", "sset", "Master", "5%+"};
+char *lower_volume[] = {"amixer", "-q", "-D", "pulse", "sset", "Master", "5%-"};
+char *media_mute[] = {"amixer", "-q", "-D", "pulse", "sset", "Master", "toggle"};
+char *media_pause[] = {"playerctl", "play-pause"};
+char *media_next[] = {"playerctl", "next"};
+char *media_prev[] = {"playerctl", "previous"};
+char *media_toggle[] = {"patoggle"};
 
 static void
-sigchld(int sig)
+asystem(char *cmd[])
 {
-	while (waitpid(-1, NULL, WNOHANG) > 0)
-		;
-}
+	pid_t pid;
 
-static void
-asystem(const char *cmd)
-{
-	if (!fork()) {
-		exit(system(cmd));
+	if (!(pid = fork())) {
+		if (!fork()) {
+			execvp(cmd[0], cmd);
+		}
+		exit(0);
 	}
+	waitpid(pid, NULL, 0);
 }
 
 enum {
@@ -210,6 +209,9 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				}
 			}
 			switch (ksym) {
+			case XK_F2:
+				asystem(media_toggle);
+				break;
 			case XF86XK_AudioPlay:
 			case XF86XK_AudioStop:
 			case XK_F1:
@@ -441,9 +443,6 @@ main(int argc, char **argv) {
 	} ARGEND
 
 	image = imlib_load_image("/home/dms/.config/i3/wall");
-
-	if (signal(SIGCHLD, sigchld) == SIG_ERR)
-		die("slock: could not catch SIGCHLD\n");
 
 	/* validate drop-user and -group */
 	errno = 0;
