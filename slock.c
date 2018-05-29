@@ -31,18 +31,18 @@ char *argv0;
 Imlib_Image image;
 
 // power commands
-char *cmd_sleep[] = {"sh", "-c", "sleep 3 && systemctl suspend -i"};
-char *cmd_power[] = {"systemctl", "poweroff", "-i"};
+char *cmd_sleep[] = { "sh", "-c", "sleep 3 && systemctl suspend -i", NULL };
+char *cmd_power[] = { "systemctl", "poweroff", "-i", NULL };
 const int NPOWEROFF = 3;
 
 // playback commands
-char *raise_volume[] = {"amixer", "-q", "-D", "pulse", "sset", "Master", "5%+"};
-char *lower_volume[] = {"amixer", "-q", "-D", "pulse", "sset", "Master", "5%-"};
-char *media_mute[] = {"amixer", "-q", "-D", "pulse", "sset", "Master", "toggle"};
-char *media_pause[] = {"playerctl", "play-pause"};
-char *media_next[] = {"playerctl", "next"};
-char *media_prev[] = {"playerctl", "previous"};
-char *media_toggle[] = {"patoggle"};
+char *raise_volume[] = { "amixer", "-q", "-D", "pulse", "sset", "Master", "5%+", NULL };
+char *lower_volume[] = { "amixer", "-q", "-D", "pulse", "sset", "Master", "5%-", NULL };
+char *media_mute[]   = { "amixer", "-q", "-D", "pulse", "sset", "Master", "toggle", NULL };
+char *media_pause[]  = { "playerctl", "play-pause", NULL };
+char *media_next[]   = { "playerctl", "next", NULL };
+char *media_prev[]   = { "playerctl", "previous", NULL };
+char *media_toggle[] = { "patoggle", NULL };
 
 static void
 asystem(char *cmd[])
