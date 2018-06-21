@@ -8,6 +8,7 @@
 #include <errno.h>
 #include <grp.h>
 #include <pwd.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -56,6 +57,21 @@ asystem(char *cmd[])
 		exit(0);
 	}
 	waitpid(pid, NULL, 0);
+}
+
+#define SLEEP_TIMEOUT (10*60)
+static void
+alrm_suspend(int sig)
+{
+	pid_t pid;
+
+	if (!(pid = fork())) {
+		execvp(cmd_sleep[0], cmd_sleep);
+		exit(0);
+	}
+	waitpid(pid, NULL, 0);
+
+	alarm(SLEEP_TIMEOUT);
 }
 
 enum {
@@ -184,7 +200,10 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	if (!XkbGetIndicatorState(dpy, XkbUseCoreKbd, &indicators))
 		caps = indicators & 1;
 
+	alarm(SLEEP_TIMEOUT);
+
 	while (running && !XNextEvent(dpy, &ev)) {
+		alarm(SLEEP_TIMEOUT);
 		if (ev.type == KeyPress) {
 			explicit_bzero(&buf, sizeof(buf));
 			num = XLookupString(&ev.xkey, buf, sizeof(buf), &ksym, 0);
@@ -510,6 +529,14 @@ main(int argc, char **argv) {
 			_exit(1);
 		}
 	}
+
+	/* setup timeout alarm */
+	struct sigaction act;
+	act.sa_handler = alrm_suspend;
+	act.sa_flags = SA_RESTART;
+	sigfillset(&act.sa_mask);
+	if (sigaction(SIGALRM, &act, NULL) < 0)
+		die("slock: sigaction failed: %s\n", strerror(errno));
 
 	/* everything is now blank. Wait for the correct password */
 	readpw(dpy, &rr, locks, nscreens, hash);
