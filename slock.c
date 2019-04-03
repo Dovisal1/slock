@@ -32,8 +32,8 @@ char *argv0;
 Imlib_Image image;
 
 // power commands
-char *cmd_sleep[] = { "sh", "-c", "sleep 3 && systemctl suspend -i", NULL };
-char *cmd_power[] = { "systemctl", "poweroff", "-i", NULL };
+char *cmd_sleep[] = { "systemctl", "suspend", NULL };
+char *cmd_power[] = { "systemctl", "poweroff", NULL };
 const int NPOWEROFF = 3;
 
 // playback commands
@@ -54,7 +54,7 @@ asystem(char *cmd[])
 		if (!fork()) {
 			execvp(cmd[0], cmd);
 		}
-		exit(0);
+		exit(1);
 	}
 	waitpid(pid, NULL, 0);
 }
@@ -67,7 +67,7 @@ alrm_suspend(int sig)
 
 	if (!(pid = fork())) {
 		execvp(cmd_sleep[0], cmd_sleep);
-		exit(0);
+		exit(1);
 	}
 	waitpid(pid, NULL, 0);
 
@@ -80,6 +80,7 @@ enum {
 	INPUT,
 	FAILED,
 	CAPS,
+	BLACK,
 	NUMCOLS
 };
 
@@ -183,7 +184,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 {
 	XRRScreenChangeNotifyEvent *rre;
 	char buf[32], passwd[256], *inputhash;
-	int num, screen, running, failure, oldc, caps, flash, sleep, poweroff;
+	int num, screen, running, failure, oldc, caps, flash, sleep, poweroff, black;
 	unsigned int len, color, indicators;
 	KeySym ksym;
 	XEvent ev;
@@ -195,6 +196,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	len = 0;
 	running = 1;
 	failure = 0;
+	black = 0;
 	oldc = INIT;
 
 	if (!XkbGetIndicatorState(dpy, XkbUseCoreKbd, &indicators))
@@ -282,6 +284,10 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			case XK_Caps_Lock:
 				caps = !caps;
 				break;
+			case XK_Super_L:
+			case XK_Super_R:
+				black = !black;
+				break;
 			default:
 				if (IsFunctionKey(ksym) ||
 			    		IsKeypadKey(ksym) ||
@@ -298,7 +304,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			}
 			color = len ? (caps ? CAPS : INPUT) :
 				((failure || failonclear) ? FAILED :
-				 (caps ? CAPS : INIT));
+				 (black ? BLACK : (caps ? CAPS : INIT)));
 			if (running && oldc != color) {
 				for (screen = 0; screen < nscreens; screen++) {
 					if (locks[screen]->bgmap && color==INIT)
