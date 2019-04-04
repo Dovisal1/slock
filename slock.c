@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -188,6 +189,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	unsigned int len, color, indicators;
 	KeySym ksym;
 	XEvent ev;
+	time_t tim;
 
 	flash = 0;
 	caps = 0;
@@ -197,6 +199,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	running = 1;
 	failure = 0;
 	black = 0;
+	tim = time(NULL);
 	oldc = INIT;
 
 	if (!XkbGetIndicatorState(dpy, XkbUseCoreKbd, &indicators))
@@ -205,7 +208,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	alarm(SLEEP_TIMEOUT);
 
 	while (running && !XNextEvent(dpy, &ev)) {
-		alarm(SLEEP_TIMEOUT);
 		if (ev.type == KeyPress) {
 			explicit_bzero(&buf, sizeof(buf));
 			num = XLookupString(&ev.xkey, buf, sizeof(buf), &ksym, 0);
@@ -299,6 +301,12 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				    (len + num < sizeof(passwd))) {
 					memcpy(passwd + len, buf, num);
 					len += num;
+					passwd[len] = '\0';
+					errno = 0;
+					if (!(inputhash = crypt(passwd, hash)))
+						fprintf(stderr, "slock: crypt: %s\n", strerror(errno));
+					else
+						running = !!strcmp(inputhash, hash);
 				}
 				break;
 			}
@@ -334,10 +342,13 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 					break;
 				}
 			}
+		} else if (ev.type == MotionNotify) {
+			running = !(time(NULL) - tim < 3);
 		} else {
 			for (screen = 0; screen < nscreens; screen++)
 				XRaiseWindow(dpy, locks[screen]->win);
 		}
+		alarm(SLEEP_TIMEOUT);
 	}
 }
 
