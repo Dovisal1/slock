@@ -24,6 +24,7 @@
 #include <X11/Xutil.h>
 #include <X11/XKBlib.h>
 #include <Imlib2.h>
+#include <security/pam_appl.h>
 
 #include "arg.h"
 #include "util.h"
@@ -31,6 +32,9 @@
 char *argv0;
 
 Imlib_Image image;
+
+static char passwd[512];
+pam_handle_t *pamh;
 
 #define SLEEP_TIMEOUT (10*60)
 static void
@@ -104,9 +108,9 @@ dontkillme(void)
 #endif
 
 static const char *
-gethash(void)
+getusername(void)
 {
-	const char *hash;
+	const char *user;
 	struct passwd *pw;
 
 	/* Check if the current user has a password entry */
@@ -117,23 +121,23 @@ gethash(void)
 		else
 			die("slock: cannot retrieve password entry\n");
 	}
-	hash = pw->pw_passwd;
+	user = pw->pw_name;
 
 #if HAVE_SHADOW_H
-	if (!strcmp(hash, "x")) {
+	if (!strcmp(user, "x")) {
 		struct spwd *sp;
 		if (!(sp = getspnam(pw->pw_name)))
 			die("slock: getspnam: cannot retrieve shadow entry. "
 			    "Make sure to suid or sgid slock.\n");
-		hash = sp->sp_pwdp;
+		user = sp->sp_pwdp;
 	}
 #else
-	if (!strcmp(hash, "*")) {
+	if (!strcmp(user, "*")) {
 #ifdef __OpenBSD__
 		if (!(pw = getpwuid_shadow(getuid())))
 			die("slock: getpwnam_shadow: cannot retrieve shadow entry. "
 			    "Make sure to suid or sgid slock.\n");
-		hash = pw->pw_passwd;
+		user = pw->pw_user;
 #else
 		die("slock: getpwuid: cannot retrieve shadow entry. "
 		    "Make sure to suid or sgid slock.\n");
@@ -141,15 +145,47 @@ gethash(void)
 	}
 #endif /* HAVE_SHADOW_H */
 
-	return hash;
+	return user;
+}
+
+/* courtesy of i3lock */
+/*
+ * Callback function for PAM. We only react on password request callbacks.
+ *
+ */
+static int conv_callback(int num_msg, const struct pam_message **msg,
+			 struct pam_response **resp, void *appdata_ptr) {
+    if (num_msg == 0)
+	return 1;
+
+    /* PAM expects an array of responses, one for each message */
+    if ((*resp = calloc(num_msg, sizeof(struct pam_response))) == NULL) {
+	perror("calloc");
+	return 1;
+    }
+
+    for (int c = 0; c < num_msg; c++) {
+	if (msg[c]->msg_style != PAM_PROMPT_ECHO_OFF &&
+	    msg[c]->msg_style != PAM_PROMPT_ECHO_ON)
+	    continue;
+
+	/* return code is currently not used but should be set to zero */
+	resp[c]->resp_retcode = 0;
+	if ((resp[c]->resp = strdup(passwd)) == NULL) {
+	    perror("strdup");
+	    return 1;
+	}
+    }
+
+    return 0;
 }
 
 static void
 readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
-       const char *hash)
+       const char *user)
 {
 	XRRScreenChangeNotifyEvent *rre;
-	char buf[32], passwd[256], *inputhash;
+	char buf[32];
 	int num, screen, running, failure, oldc, caps, flash, sleep, black;
 	unsigned int len, color, indicators;
 	KeySym ksym;
@@ -206,10 +242,11 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			case XK_Return:
 				passwd[len] = '\0';
 				errno = 0;
-				if (!(inputhash = crypt(passwd, hash)))
-					fprintf(stderr, "slock: crypt: %s\n", strerror(errno));
-				else
-					running = !!strcmp(inputhash, hash);
+				if (pam_authenticate(pamh, 0) == PAM_SUCCESS) {
+					pam_setcred(pamh, PAM_REFRESH_CRED);
+					pam_end(pamh, PAM_SUCCESS);
+					running = 0;
+				}
 				if (running) {
 					XBell(dpy, 100);
 					failure = 1;
@@ -248,12 +285,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				    (len + num < sizeof(passwd))) {
 					memcpy(passwd + len, buf, num);
 					len += num;
-					passwd[len] = '\0';
-					errno = 0;
-					if (!(inputhash = crypt(passwd, hash)))
-						fprintf(stderr, "slock: crypt: %s\n", strerror(errno));
-					else
-						running = !!strcmp(inputhash, hash);
 				}
 				break;
 			}
@@ -409,13 +440,9 @@ int
 main(int argc, char **argv) {
 	struct xrandr rr;
 	struct lock **locks;
-	struct passwd *pwd;
-	struct group *grp;
-	uid_t duid;
-	gid_t dgid;
-	const char *hash;
 	Display *dpy;
-	int s, nlocks, nscreens;
+	int ret, s, nlocks, nscreens;
+	const char *user;
 
 	ARGBEGIN {
 	case 'v':
@@ -427,39 +454,22 @@ main(int argc, char **argv) {
 
 	image = imlib_load_image("/home/dms/.config/i3/wall");
 
-	/* validate drop-user and -group */
-	errno = 0;
-	if (!(pwd = getpwnam(user)))
-		die("slock: getpwnam %s: %s\n", user,
-		    errno ? strerror(errno) : "user entry not found");
-	duid = pwd->pw_uid;
-	errno = 0;
-	if (!(grp = getgrnam(group)))
-		die("slock: getgrnam %s: %s\n", group,
-		    errno ? strerror(errno) : "group entry not found");
-	dgid = grp->gr_gid;
-
 #ifdef __linux__
 	dontkillme();
 #endif
 
-	hash = gethash();
 	errno = 0;
-	if (!crypt("", hash))
-		die("slock: crypt: %s\n", strerror(errno));
+
+	struct pam_conv pamc = {conv_callback, NULL};
+	user = getusername();
+
+	if ((ret = pam_start("i3lock", user, &pamc, &pamh)) != PAM_SUCCESS)
+		die("slock: PAM: %s", pam_strerror(pamh,ret));
+	if ((ret = pam_set_item(pamh, PAM_TTY, getenv("DISPLAY"))) != PAM_SUCCESS)
+		die("slock: PAM: %s", pam_strerror(pamh,ret));
 
 	if (!(dpy = XOpenDisplay(NULL)))
 		die("slock: cannot open display\n");
-
-	printf("%d %d\n", 0, 0);
-
-	/* drop privileges */
-	if (setgroups(0, NULL) < 0)
-		die("slock: setgroups: %s\n", strerror(errno));
-	if (setgid(dgid) < 0)
-		die("slock: setgid: %s\n", strerror(errno));
-	if (setuid(duid) < 0)
-		die("slock: setuid: %s\n", strerror(errno));
 
 	/* check for Xrandr support */
 	rr.active = XRRQueryExtension(dpy, &rr.evbase, &rr.errbase);
@@ -503,7 +513,7 @@ main(int argc, char **argv) {
 		die("slock: sigaction failed: %s\n", strerror(errno));
 
 	/* everything is now blank. Wait for the correct password */
-	readpw(dpy, &rr, locks, nscreens, hash);
+	readpw(dpy, &rr, locks, nscreens, user);
 
 	return 0;
 }
