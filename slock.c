@@ -32,46 +32,11 @@ char *argv0;
 
 Imlib_Image image;
 
-// power commands
-char *cmd_sleep[] = { "systemctl", "suspend", NULL };
-char *cmd_power[] = { "systemctl", "poweroff", NULL };
-const int NPOWEROFF = 3;
-
-// playback commands
-char *raise_volume[] = { "amixer", "-q", "-D", "pulse", "sset", "Master", "5%+", NULL };
-char *lower_volume[] = { "amixer", "-q", "-D", "pulse", "sset", "Master", "5%-", NULL };
-char *media_mute[]   = { "amixer", "-q", "-D", "pulse", "sset", "Master", "toggle", NULL };
-char *media_pause[]  = { "playerctl", "play-pause", NULL };
-char *media_next[]   = { "playerctl", "next", NULL };
-char *media_prev[]   = { "playerctl", "previous", NULL };
-char *media_toggle[] = { "patoggle", NULL };
-
-static void
-asystem(char *cmd[])
-{
-	pid_t pid;
-
-	if (!(pid = fork())) {
-		if (!fork()) {
-			execvp(cmd[0], cmd);
-		}
-		exit(1);
-	}
-	waitpid(pid, NULL, 0);
-}
-
 #define SLEEP_TIMEOUT (10*60)
 static void
 alrm_suspend(int sig)
 {
-	pid_t pid;
-
-	if (!(pid = fork())) {
-		execvp(cmd_sleep[0], cmd_sleep);
-		exit(1);
-	}
-	waitpid(pid, NULL, 0);
-
+	system("systemctl suspend");
 	alarm(SLEEP_TIMEOUT);
 }
 
@@ -185,7 +150,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 {
 	XRRScreenChangeNotifyEvent *rre;
 	char buf[32], passwd[256], *inputhash;
-	int num, screen, running, failure, oldc, caps, flash, sleep, poweroff, black;
+	int num, screen, running, failure, oldc, caps, flash, sleep, black;
 	unsigned int len, color, indicators;
 	KeySym ksym;
 	XEvent ev;
@@ -194,7 +159,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	flash = 0;
 	caps = 0;
 	sleep = 0;
-	poweroff = 0;
 	len = 0;
 	running = 1;
 	failure = 0;
@@ -219,10 +183,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			}
 			if(ev.xkey.state & ControlMask) {
 				switch(ksym) {
-				case XK_p:
-					if (++poweroff == NPOWEROFF)
-						asystem(cmd_power);
-					continue;
 				case XK_z:
 					sleep = 1;
 				case XK_u:
@@ -233,27 +193,15 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			}
 			switch (ksym) {
 			case XK_F2:
-				asystem(media_toggle);
-				break;
 			case XF86XK_AudioPlay:
 			case XF86XK_AudioStop:
 			case XK_F1:
-				asystem(media_pause);
-				break;
 			case XF86XK_AudioPrev:
-				asystem(media_prev);
-				break;
 			case XF86XK_AudioNext:
-				asystem(media_next);
-				break;
 			case XF86XK_AudioLowerVolume:
-				asystem(lower_volume);
-				break;
 			case XF86XK_AudioRaiseVolume:
-				asystem(raise_volume);
-				break;
 			case XF86XK_AudioMute:
-				asystem(media_mute);
+				XSendEvent(dpy, DefaultRootWindow(dpy), True, ButtonPressMask, &ev);
 				break;
 			case XK_Return:
 				passwd[len] = '\0';
@@ -273,10 +221,9 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				explicit_bzero(&passwd, sizeof(passwd));
 				len = 0;
 				failure = 0;
-				poweroff = 0;
 				flash = !flash;
 				if (sleep)
-					asystem(cmd_sleep);
+					system("systemctl suspend");
 				sleep = 0;
 				break;
 			case XK_BackSpace:
