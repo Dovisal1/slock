@@ -50,6 +50,7 @@ enum {
 	INPUT,
 	FAILED,
 	CAPS,
+	PAM,
 	BLACK,
 	NUMCOLS
 };
@@ -242,6 +243,15 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			case XK_Return:
 				passwd[len] = '\0';
 				errno = 0;
+				color = PAM;
+				for (screen = 0; screen < nscreens; screen++) {
+					XSetWindowBackground(dpy,
+						 locks[screen]->win,
+						 locks[screen]->colors[color]);
+					XClearWindow(dpy, locks[screen]->win);
+					XRaiseWindow(dpy, locks[screen]->win);
+				}
+				XSync(dpy, False);
 				if (pam_authenticate(pamh, 0) == PAM_SUCCESS) {
 					pam_setcred(pamh, PAM_REFRESH_CRED);
 					pam_end(pamh, PAM_SUCCESS);
@@ -293,7 +303,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				 (black ? BLACK : (caps ? CAPS : INIT)));
 			if (running && oldc != color) {
 				for (screen = 0; screen < nscreens; screen++) {
-					if (locks[screen]->bgmap && color==INIT)
+					if (color == INIT && locks[screen]->bgmap)
 						XSetWindowBackgroundPixmap(dpy,
 							locks[screen]->win,
 							locks[screen]->bgmap);
