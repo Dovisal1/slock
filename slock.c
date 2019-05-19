@@ -238,6 +238,8 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			case XF86XK_AudioLowerVolume:
 			case XF86XK_AudioRaiseVolume:
 			case XF86XK_AudioMute:
+			case XF86XK_MonBrightnessUp:
+			case XF86XK_MonBrightnessDown:
 				XSendEvent(dpy, DefaultRootWindow(dpy), True, ButtonPressMask, &ev);
 				break;
 			case XK_Return:
