@@ -187,12 +187,11 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 {
 	XRRScreenChangeNotifyEvent *rre;
 	char buf[32];
-	int num, screen, running, failure, oldc, caps, flash, sleep, black;
+	int num, screen, running, failure, oldc, caps, sleep, black;
 	unsigned int len, color, indicators;
 	KeySym ksym;
 	XEvent ev;
 
-	flash = 0;
 	caps = 0;
 	sleep = 0;
 	len = 0;
@@ -266,7 +265,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				explicit_bzero(&passwd, sizeof(passwd));
 				len = 0;
 				failure = 0;
-				flash = !flash;
 				if (sleep)
 					system("systemctl suspend");
 				sleep = 0;
@@ -469,7 +467,7 @@ main(int argc, char **argv) {
 	struct pam_conv pamc = {conv_callback, NULL};
 	user = getusername();
 
-	if ((ret = pam_start("i3lock", user, &pamc, &pamh)) != PAM_SUCCESS)
+	if ((ret = pam_start("slock", user, &pamc, &pamh)) != PAM_SUCCESS)
 		die("slock: PAM: %s", pam_strerror(pamh,ret));
 	if ((ret = pam_set_item(pamh, PAM_TTY, getenv("DISPLAY"))) != PAM_SUCCESS)
 		die("slock: PAM: %s", pam_strerror(pamh,ret));
