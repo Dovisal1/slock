@@ -187,20 +187,17 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 {
 	XRRScreenChangeNotifyEvent *rre;
 	char buf[32];
-	int num, screen, running, failure, oldc, caps, flash, sleep, black;
+	int num, screen, running, failure, oldc, caps, sleep, black;
 	unsigned int len, color, indicators;
 	KeySym ksym;
 	XEvent ev;
-	time_t tim;
 
-	flash = 0;
 	caps = 0;
 	sleep = 0;
 	len = 0;
 	running = 1;
 	failure = 0;
 	black = 0;
-	tim = time(NULL);
 	oldc = INIT;
 
 	if (!XkbGetIndicatorState(dpy, XkbUseCoreKbd, &indicators))
@@ -270,7 +267,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				explicit_bzero(&passwd, sizeof(passwd));
 				len = 0;
 				failure = 0;
-				flash = !flash;
 				if (sleep)
 					system("systemctl suspend");
 				sleep = 0;
@@ -332,8 +328,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 					break;
 				}
 			}
-		} else if (ev.type == MotionNotify) {
-			running = !(time(NULL) - tim < 3);
 		} else {
 			for (screen = 0; screen < nscreens; screen++)
 				XRaiseWindow(dpy, locks[screen]->win);
@@ -475,7 +469,7 @@ main(int argc, char **argv) {
 	struct pam_conv pamc = {conv_callback, NULL};
 	user = getusername();
 
-	if ((ret = pam_start("i3lock", user, &pamc, &pamh)) != PAM_SUCCESS)
+	if ((ret = pam_start("slock", user, &pamc, &pamh)) != PAM_SUCCESS)
 		die("slock: PAM: %s", pam_strerror(pamh,ret));
 	if ((ret = pam_set_item(pamh, PAM_TTY, getenv("DISPLAY"))) != PAM_SUCCESS)
 		die("slock: PAM: %s", pam_strerror(pamh,ret));
