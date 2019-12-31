@@ -191,7 +191,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	unsigned int len, color, indicators;
 	KeySym ksym;
 	XEvent ev;
-	time_t tim;
 
 	flash = 0;
 	caps = 0;
@@ -200,7 +199,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	running = 1;
 	failure = 0;
 	black = 0;
-	tim = time(NULL);
 	oldc = INIT;
 
 	if (!XkbGetIndicatorState(dpy, XkbUseCoreKbd, &indicators))
@@ -330,8 +328,6 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 					break;
 				}
 			}
-		} else if (ev.type == MotionNotify) {
-			running = !(time(NULL) - tim < 3);
 		} else {
 			for (screen = 0; screen < nscreens; screen++)
 				XRaiseWindow(dpy, locks[screen]->win);
