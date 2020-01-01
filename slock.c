@@ -37,10 +37,11 @@ static char passwd[512];
 pam_handle_t *pamh;
 
 #define SLEEP_TIMEOUT (10*60)
+#define SLEEP_CMD ("sh -c 'sleep 0.5 && systemctl suspend'")
 static void
 alrm_suspend(int sig)
 {
-	system("systemctl suspend");
+	system(SLEEP_CMD);
 	alarm(SLEEP_TIMEOUT);
 }
 
@@ -268,7 +269,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 				len = 0;
 				failure = 0;
 				if (sleep)
-					system("systemctl suspend");
+					system(SLEEP_CMD);
 				sleep = 0;
 				break;
 			case XK_BackSpace:
