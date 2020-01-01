@@ -29,6 +29,7 @@
 
 #include "arg.h"
 #include "util.h"
+#include "config.h"
 
 char *argv0;
 
@@ -37,25 +38,13 @@ Imlib_Image image;
 static char passwd[512];
 pam_handle_t *pamh;
 
-#define SLEEP_TIMEOUT (10*60)
-#define SLEEP_CMD ("sh -c 'sleep 0.5 && systemctl suspend'")
+#define SLEEP_CMD "sleep 0.5 && systemctl suspend"
 static void
 alrm_suspend(int sig)
 {
 	system(SLEEP_CMD);
-	alarm(SLEEP_TIMEOUT);
+	alarm(sleeptime);
 }
-
-enum {
-	INIT,
-	CLEAR,
-	INPUT,
-	FAILED,
-	CAPS,
-	PAM,
-	BLACK,
-	NUMCOLS
-};
 
 struct lock {
 	int screen;
@@ -70,8 +59,6 @@ struct xrandr {
 	int evbase;
 	int errbase;
 };
-
-#include "config.h"
 
 static void
 die(const char *errstr, ...)
@@ -205,7 +192,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 	if (!XkbGetIndicatorState(dpy, XkbUseCoreKbd, &indicators))
 		caps = indicators & 1;
 
-	alarm(SLEEP_TIMEOUT);
+	alarm(sleeptime);
 
 	while (running && !XNextEvent(dpy, &ev)) {
 		if (ev.type == KeyPress) {
@@ -334,7 +321,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			for (screen = 0; screen < nscreens; screen++)
 				XRaiseWindow(dpy, locks[screen]->win);
 		}
-		alarm(SLEEP_TIMEOUT);
+		alarm(sleeptime);
 	}
 }
 

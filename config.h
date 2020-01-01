@@ -1,4 +1,15 @@
 
+enum {
+	INIT,
+	CLEAR,
+	INPUT,
+	FAILED,
+	CAPS,
+	PAM,
+	BLACK,
+	NUMCOLS
+};
+
 static const char *colorname[NUMCOLS] = {
 	[INIT] = "#222222",
 	[CLEAR] =   "#ffb340",     /* after initialization */
@@ -13,4 +24,8 @@ static const char *colorname[NUMCOLS] = {
 static const int failonclear = 0;
 
 /* time in seconds before the monitor shuts down */
-static const int monitortime = 45;
+/* set to zero to disable the feature */
+static const int sleeptime = 10*60;
+
+/* time in seconds before the monitor shuts down */
+static const int monitortime = 60;
