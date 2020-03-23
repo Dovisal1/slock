@@ -287,7 +287,7 @@ readpw(Display *dpy, struct xrandr *rr, struct lock **locks, int nscreens,
 			}
 			color = len ? (caps ? CAPS : INPUT) :
 				((failure || failonclear) ? FAILED :
-				 (black ? BLACK : (caps ? CAPS : INIT)));
+				 (caps ? CAPS : (black? BLACK : INIT)));
 			if (running && oldc != color) {
 				for (screen = 0; screen < nscreens; screen++) {
 					if (color == INIT && locks[screen]->bgmap)
@@ -448,7 +448,7 @@ main(int argc, char **argv) {
 		usage();
 	} ARGEND
 
-	image = imlib_load_image("/home/dms/.config/i3/wall");
+	image = imlib_load_image("/home/dms/.wal");
 
 #ifdef __linux__
 	dontkillme();
